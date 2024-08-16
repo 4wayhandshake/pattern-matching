@@ -1,0 +1,3 @@
+user(name|[^a-zA-Z0-9])?
+pass(word|[^a-zA-Z0-9])?
+cred(ential|[^a-zA-Z0-9])?
