@@ -1,3 +1,17 @@
+# Place whatever regex you want in this file, one per line
+# Extended regex style will be used (like with grep -E), with some restrictions due to zipgrep.
+# zipgrep does not support Perl-Compatible Regular Expressions (PCREs), so we need to avoid all of these:
+# - \b (word boundaries)
+# - Lookaheads/lookbehinds ((?=...), (?<=...), etc.)
+# - Non-capturing groups ((?:...))
+# - Lazy quantifiers (*?, +?, ??)
+# - Complex backreferences (\1, \2, etc.)
+# - Test POSIX bracket expressions ([:alnum:], [:digit:], etc.) for environment-specific issues
+#
+# I hope you find this as useful as I do <3
+# 4wayhandshake 🤝🤝🤝🤝
+#
+#prefix(suffix|[^a-zA-Z0-9])?
 user(name|[^a-zA-Z0-9])?
 pass(word|[^a-zA-Z0-9])?
 cred(ential|[^a-zA-Z0-9])?
