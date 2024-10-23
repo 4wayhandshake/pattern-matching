@@ -117,7 +117,14 @@ fi
 
 # Step 2: Perform a recursive grep for patterns in files
 echo -e "\n\n\033[1;34mStep 2:\033[0m Performing a recursive grep for patterns in files...\n"
-find "$base_directory" -maxdepth "$max_depth" -type f 2>/dev/null | xargs grep -i -E --color=always --with-filename --line-number -f <(grep -v '^#' "$patterns_file")
+#find "$base_directory" -maxdepth "$max_depth" -type f 2>/dev/null | xargs grep -i -E --color=always --with-filename --line-number -f <(grep -v '^#' "$patterns_file")
+for MATCHEDFILE in $(find "$base_directory" -maxdepth "$max_depth" -type f 2>/dev/null | xargs grep -i -E -l -f <(grep -v '^#' "$patterns_file")); do
+    RELATIVE_FILE=$(relative_path "$MATCHEDFILE" "$base_directory")
+    for REGEX in $(grep -v "^#" patterns.txt); do
+        printf "\033[35m(Inside %s):\033[0m %s\n" "$RELATIVE_FILE"
+        grep -i -E -a --color=always --line-number "$REGEX" "$MATCHEDFILE"
+    done
+done
 if [ "$final_step" -lt 3 ]; then
     cleanup
 fi
