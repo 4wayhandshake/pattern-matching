@@ -93,7 +93,7 @@ fi
 
 # Check if patterns_file is provided and update it
 if [ ! -z "$4" ]; then
-    patterns_file="$4"
+    patterns_file=$(realpath "$4")
 fi
 
 # Check if the provided final step is valid
