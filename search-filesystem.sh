@@ -3,7 +3,8 @@
 # Set default values for optional arguments
 max_depth=2
 final_step=4
-patterns_file="patterns.txt"
+script_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+patterns_file="$script_dir/patterns.txt"
 
 usage_text="
 # Function to display usage information
