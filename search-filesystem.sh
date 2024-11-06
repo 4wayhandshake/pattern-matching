@@ -39,7 +39,7 @@ usage() {
 }
 
 cleanup() {
-    echo -e "\n\033[1;34mSearch complete.\033[0m\n"
+    echo -e "\n\n\033[1;34mSearch complete.\033[0m\n"
     exit 0
 }
 
@@ -47,22 +47,31 @@ recolorize() {
     local REGEX="$1"
     # Read from stdin
     while IFS= read -r line; do
-        MATCHED_TEXT=$(echo $line | grep -i -E -o "$REGEX")
-        # Extract text before the first colon
+        #MATCHED_TEXT=$(echo $line | grep -i -E -o "$REGEX")
+        
+        # Extract text before the first colon. 
+        # Note that the "inner" filepath may not actually exist, if $2 is an archive file!
         before_colon="(Inside $2) ${line%%:*}:"
         after_colon="${line#*:}"
+        
+        MATCHED_TEXT=$(echo $after_colon | grep -i -E -o "$REGEX")
 
         # Color the text before the first colon (magenta)
         colored_before="\033[35m$before_colon\033[0m"
 
         # Color the matching search term (red and bold)
-        #colored_after=$(echo "$after_colon" | sed "s/\($MATCHED_TEXT\)/\033[31mtest\033[0m/g")
         REDBOLD='\\033[1;31m';
         RESET='\\033[0m';
-        colored_after=$(echo "$after_colon" | sed -e "s/\($MATCHED_TEXT\)/${REDBOLD}\1${RESET}/g")
-
-        # Output the combined result
-        echo -e "$colored_before $colored_after"
+        ESCAPED_MATCHED_TEXT=$(printf '%s\n' "$MATCHED_TEXT" | sed -e 's/[\/&]/\\&/g')
+        
+        # Output the combined result.
+        # redbold the text only if it doesnt produce errors
+        if colored_after=$(echo "$after_colon" | sed -e "s/$ESCAPED_MATCHED_TEXT/${REDBOLD}&${RESET}/g" 2>/dev/null); then
+            echo -e "$colored_before $colored_after"
+        else
+            echo -e "$colored_before $after_colon"  # Fallback if sed fails
+        fi
+        
     done
 }
 
@@ -75,8 +84,8 @@ fi
 base_directory="$1"
 
 relative_path() {
-    file_path=$(realpath $1)
-    base_path=$(realpath $2)
+    file_path=$(realpath "$1")
+    base_path=$(realpath "$2")
     rel_path=$(realpath --relative-to="$base_path" "$file_path")
     echo $rel_path
 }
@@ -117,14 +126,17 @@ fi
 
 # Step 2: Perform a recursive grep for patterns in files
 echo -e "\n\n\033[1;34mStep 2:\033[0m Performing a recursive grep for patterns in files...\n"
-#find "$base_directory" -maxdepth "$max_depth" -type f 2>/dev/null | xargs grep -i -E --color=always --with-filename --line-number -f <(grep -v '^#' "$patterns_file")
-for MATCHEDFILE in $(find "$base_directory" -maxdepth "$max_depth" -type f 2>/dev/null | xargs grep -i -E -l -f <(grep -v '^#' "$patterns_file")); do
+while IFS= read -r MATCHEDFILE; do
     RELATIVE_FILE=$(relative_path "$MATCHEDFILE" "$base_directory")
-    for REGEX in $(grep -v "^#" patterns.txt); do
-        printf "\033[35m(Inside %s):\033[0m %s\n" "$RELATIVE_FILE"
-        grep -i -E -a --color=always --line-number "$REGEX" "$MATCHEDFILE"
+    for REGEX in $(grep -v "^#" "$patterns_file"); do
+        MATCHED_OUTPUT=$(grep -i -E -a --color=always --line-number "$REGEX" "$MATCHEDFILE")
+        if [ -n "$MATCHED_OUTPUT" ]; then
+            printf "\n\033[35m(Inside \"%s\"):\033[0m\n" "$RELATIVE_FILE"
+            echo "$MATCHED_OUTPUT"
+        fi
     done
-done
+done < <(find "$base_directory" -maxdepth "$max_depth" -type f 2>/dev/null | xargs -d '\n' grep -i -E -l -f <(grep -v '^#' "$patterns_file"))
+
 if [ "$final_step" -lt 3 ]; then
     cleanup
 fi
@@ -133,33 +145,38 @@ fi
 echo -e "\n\n\033[1;34mStep 3:\033[0m Checking if zipgrep is available...\n"
 if command -v zipgrep &> /dev/null; then
     echo -e "(\033[1;32mzipgrep is available.\033[0m Searching within .zip files...)\n"
-    # TODO - figure out a more graceful way to accomodate zipgrep's lack of "-f" support
-    for ZIPFILE in $(find "$base_directory" -maxdepth "$max_depth" -type f -name "*.zip" 2>/dev/null); do
+    while IFS= read -r ZIPFILE; do 
         RELATIVE_FILE=$(relative_path "$ZIPFILE" "$base_directory")
-        for REGEX in $(grep -v "^#" patterns.txt); do
-            zipgrep -i -E "$REGEX" "$ZIPFILE" | recolorize "$REGEX" "$RELATIVE_FILE"
+        for REGEX in $(grep -v "^#" "$patterns_file"); do
+            MATCHED_OUTPUT=$(zipgrep -i -E "$REGEX" "$ZIPFILE")
+            if [ -n "$MATCHED_OUTPUT" ]; then
+                echo "$MATCHED_OUTPUT" | recolorize "$REGEX" "$RELATIVE_FILE"
+            fi
         done
-    done
+    done < <(find "$base_directory" -maxdepth "$max_depth" -type f -name "*.zip" 2>/dev/null)
 else
-    echo -e "\033[1;31mzipgrep is not available.\033[0m"
+    echo -e "\033[1;31m...zipgrep is not available. Skipping step 3.\033[0m"
 fi
+
 if [ "$final_step" -lt 4 ]; then
     cleanup
 fi
 
 # Step 4: Check for zgrep and search within .gz, .tar.gz, and .7z files
-echo -e "\n\n\033[1;34mStep 4:\033[0m Checking if zgrep is available...\n"
-if command -v zgrep &> /dev/null; then
-    echo -e "(\033[1;32mzgrep is available.\033[0m Searching within .gz, .tar.gz, and .7z files...)\n"
-    for GZIPFILE in $(find "$base_directory" -maxdepth "$max_depth" -type f \( -name "*.gz" -o -name "*.tar.gz" -o -name "*.7z" \) 2>/dev/null); do
+echo -e "\n\n\033[1;34mStep 4:\033[0m Checking if tar is available...\n"
+if command -v tar &> /dev/null; then
+    echo -e "(\033[1;32mtar is available.\033[0m Searching within .gz, .tar.gz, and .7z files...)\n"
+    while IFS= read -r GZIPFILE; do
         RELATIVE_FILE=$(relative_path "$GZIPFILE" "$base_directory")
-        for REGEX in $(grep -v "^#" patterns.txt); do
-            tar xaf "$GZIPFILE" --to-command "grep -hH -i -E -a --label=\$TAR_FILENAME --color=always --with-filename --line-number \"$REGEX\" || true" | recolorize "$REGEX" "$RELATIVE_FILE"
+        for REGEX in $(grep -v "^#" "$patterns_file"); do
+            MATCHED_OUTPUT=$(tar xaf "$GZIPFILE" --to-command "grep -hH -i -E -a --label=\"\$TAR_FILENAME\" --color=always --with-filename --line-number '$REGEX' || true")
+            if [ -n "$MATCHED_OUTPUT" ]; then
+                echo "$MATCHED_OUTPUT" | recolorize "$REGEX" "$RELATIVE_FILE"
+            fi
         done
-    done
-    
+    done < <(find "$base_directory" -maxdepth "$max_depth" -type f \( -name "*.gz" -o -name "*.tar.gz" -o -name "*.7z" \) 2>/dev/null)
 else
-    echo -e "\033[1;31mzgrep is not available.\033[0m"
+    echo -e "\033[1;31m...tar is not available.\033[0m"
 fi
 
 cleanup

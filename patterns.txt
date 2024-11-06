@@ -10,8 +10,8 @@
 #
 # I hope you find this as useful as I do <3
 # 4wayhandshake 🤝🤝🤝🤝
-#
-#prefix(suffix|[^a-zA-Z0-9])?
+
+# prefix(suffix|[^a-zA-Z0-9])?
 
 # Examples to check for important keywords
 user(name|[^a-zA-Z0-9])?
